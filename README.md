@@ -10,11 +10,25 @@
 ├── data/
 │   ├── prepare_data.py      # 数据预处理脚本
 │   ├── data_loader.py       # 数据加载器
-│   └── augmentations.py     # 数据增强
+│   ├── dynamic_dataset.py   # 动态数据集类
+│   ├── augmentations.py     # 数据增强
+│   ├── create_database.py   # 数据库创建脚本
+│   ├── unsplash/          # Unsplash数据集
+│   │   └── db/
+│   │       └── unsplash.db
+│   └── upsplash/         # Unsplash数据集文件
+│       ├── DOCS.md
+│       ├── README.md
+│       └── TERMS.md
 ├── models/
 │   ├── mobilenetv2.py       # MobileNetV2模型定义
 │   ├── regression_head.py   # 回归头部定义
-│   └── model.py             # 完整模型组装
+│   ├── model.py             # 完整模型组装
+│   ├── checkpoints/         # 模型检查点
+│   ├── onnx/              # ONNX模型
+│   │   └── model.onnx
+│   └── tflite/            # TensorFlow Lite模型
+│       └── model.tflite
 ├── training/
 │   ├── train.py             # 训练主脚本
 │   ├── evaluate.py          # 评估脚本
@@ -24,9 +38,11 @@
 │   ├── convert_tflite.py    # 转换为TFLite
 │   └── inference.py         # 推理脚本
 ├── utils/
-│   ├── metrics.py           # 评估指标
-├── README.md                # 项目说明
-└── training_flow.md         # 训练流程文档
+│   └── metrics.py           # 评估指标
+├── test_img/               # 测试图像
+├── start.py               # 图像优化主脚本
+├── README.md              # 项目说明
+└── .gitignore            # Git忽略文件配置
 ```
 
 ## 环境配置
@@ -45,7 +61,7 @@ source venv/bin/activate
 
 # 安装依赖
 pip install torch torchvision torchaudio
-pip install opencv-python tensorflow onnx onnx-tf pillow matplotlib scikit-learn
+pip install opencv-python onnxruntime pillow matplotlib scikit-learn
 ```
 
 ## 模型架构
@@ -105,10 +121,28 @@ python training/evaluate.py
 
 ## 模型部署
 
-### 1. 导出ONNX模型
+### 导出ONNX模型
 
 ```bash
 python deployment/export_onnx.py
+```
+
+导出的ONNX模型可以用于：
+- **移动端部署**：使用ONNX Runtime在Android或iOS上运行
+- **桌面应用**：使用ONNX Runtime进行推理
+- **Web应用**：通过ONNX.js在浏览器中运行
+
+### ONNX Runtime安装
+
+```bash
+# Python环境
+pip install onnxruntime
+
+# Android (在app/build.gradle中添加)
+implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.18.0'
+
+# iOS (在Podfile中添加)
+pod 'onnxruntime-objc', '~> 1.18.0'
 ```
 
 ## 推理流程
@@ -116,37 +150,80 @@ python deployment/export_onnx.py
 ### 1. 处理单个图像
 
 ```python
-from deployment.inference import process_image
+import onnxruntime as rt
+import cv2
+import numpy as np
 
+def preprocess_image(image_path):
+    image = cv2.imread(image_path)
+    image = cv2.resize(image, (224, 224))
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    image = image / 255.0
+    mean = np.array([0.485, 0.456, 0.406])
+    std = np.array([0.229, 0.224, 0.225])
+    image = (image - mean) / std
+    image = image.transpose(2, 0, 1)
+    image = np.expand_dims(image, axis=0)
+    return image.astype(np.float32)
+
+def apply_color_adjustments(image, exposure, saturation):
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    hsv[:, :, 2] = np.clip(hsv[:, :, 2] * (1 + exposure), 0, 255)
+    hsv[:, :, 1] = np.clip(hsv[:, :, 1] * saturation, 0, 255)
+    return cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+
+# 加载模型
+sess = rt.InferenceSession("models/checkpoints/model.onnx")
+input_name = sess.get_inputs()[0].name
+output_name = sess.get_outputs()[0].name
+
+# 处理图像
 image_path = 'path/to/image.jpg'
-model_path = 'models/tflite/model.tflite'
-output_path = 'path/to/output.jpg'
+preprocessed = preprocess_image(image_path)
+params = sess.run([output_name], {input_name: preprocessed})
+exposure = params[0][0][0]
+saturation = params[0][0][1]
 
-process_image(image_path, model_path, output_path)
+# 应用颜色调整
+original_image = cv2.imread(image_path)
+adjusted_image = apply_color_adjustments(original_image, exposure, saturation)
+cv2.imwrite('path/to/output.jpg', adjusted_image)
 ```
 
 ### 2. 批量处理
 
-可以使用 `deployment/inference.py` 中的 `TFLiteInference` 类进行批量处理：
-
 ```python
-from deployment.inference import TFLiteInference
+import onnxruntime as rt
 import cv2
+import os
 
-# 创建推理器
-inference = TFLiteInference('models/tflite/model.tflite')
+# 创建推理会话
+sess = rt.InferenceSession("models/checkpoints/model.onnx")
+input_name = sess.get_inputs()[0].name
+output_name = sess.get_outputs()[0].name
 
 # 处理多个图像
-image_paths = ['image1.jpg', 'image2.jpg', 'image3.jpg']
-for image_path in image_paths:
-    # 读取图像
-    image = cv2.imread(image_path)
-    # 预测参数
-    params = inference.predict(image)
-    # 应用参数
-    adjusted_image = apply_color_adjustments(image, params, config['param_ranges'])
-    # 保存结果
-    cv2.imwrite(f'output_{image_path}', adjusted_image)
+image_dir = 'path/to/images'
+output_dir = 'path/to/output'
+os.makedirs(output_dir, exist_ok=True)
+
+for filename in os.listdir(image_dir):
+    if filename.endswith(('.jpg', '.png', '.jpeg')):
+        image_path = os.path.join(image_dir, filename)
+        
+        # 预处理和推理
+        preprocessed = preprocess_image(image_path)
+        params = sess.run([output_name], {input_name: preprocessed})
+        exposure = params[0][0][0]
+        saturation = params[0][0][1]
+        
+        # 应用颜色调整
+        original_image = cv2.imread(image_path)
+        adjusted_image = apply_color_adjustments(original_image, exposure, saturation)
+        
+        # 保存结果
+        output_path = os.path.join(output_dir, f'optimized_{filename}')
+        cv2.imwrite(output_path, adjusted_image)
 ```
 
 ## 参数说明
@@ -188,16 +265,18 @@ for image_path in image_paths:
 - **数据增强**：随机翻转、旋转、亮度调整等
 
 ### 推理优化
-- **TensorFlow Lite量化**：减小模型大小，提高推理速度
+- **ONNX Runtime优化**：使用ONNX Runtime的高性能推理引擎
 - **批处理推理**：提高处理效率
-- **硬件加速**：利用GPU或NPU加速推理
+- **硬件加速**：利用GPU、CPU或NPU加速推理
+- **模型量化**：通过ONNX量化工具减小模型大小，提高推理速度
 
 ## 注意事项
 
 1. **数据集质量**：模型性能依赖于数据集的质量和多样性
 2. **参数范围**：确保训练数据中的参数值在合理范围内
-3. **模型选择**：根据部署环境选择合适的模型大小和量化级别
-4. **推理速度**：在移动设备上，建议使用量化后的TFLite模型
+3. **模型选择**：根据部署环境选择合适的模型大小和优化级别
+4. **推理速度**：在移动设备上，建议使用ONNX Runtime进行推理
+5. **ONNX兼容性**：确保ONNX Runtime版本与导出的ONNX模型版本兼容
 
 ## 未来工作
 
@@ -210,4 +289,5 @@ for image_path in image_paths:
 
 - [MobileNetV2: Inverted Residuals and Linear Bottlenecks](https://arxiv.org/abs/1801.04381)
 - [PyTorch官方文档](https://pytorch.org/docs/stable/index.html)
-- [TensorFlow Lite官方文档](https://www.tensorflow.org/lite)
+- [ONNX Runtime官方文档](https://onnxruntime.ai/docs/)
+- [ONNX官方文档](https://onnx.ai/onnx/intro/)
