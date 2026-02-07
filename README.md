@@ -57,11 +57,21 @@ pip install opencv-python tensorflow onnx onnx-tf pillow matplotlib scikit-learn
 - **两参数回归**：输出曝光偏移和饱和度系数
 - **网络结构**：MobileNetV2 → Global Average Pooling → Dense(128) → ReLU → Dense(64) → ReLU → Dense(2)
 
+
+### 数据集来源
+- **官方仓库**: https://github.com/unsplash/datasets
+
+### 数据集使用
+本项目使用 Unsplash 数据集中的图像作为训练样本，通过人工标注或自动生成的方式为每张图像分配调色参数（曝光偏移和饱和度系数）。
+
+**注意**: 使用 Unsplash 数据集时，请遵守其使用条款和许可证要求。
+
 ## 训练流程
 
 ### 1. 数据准备
 - 准备训练、验证和测试数据集
 - 数据集应包含图像和对应的调色参数标注
+- 使用 `data/prepare_data.py` 脚本进行数据预处理
 
 ### 2. 配置训练参数
 修改 `training/config.py` 中的训练配置：
@@ -99,12 +109,6 @@ python training/evaluate.py
 
 ```bash
 python deployment/export_onnx.py
-```
-
-### 2. 转换为TensorFlow Lite
-
-```bash
-python deployment/convert_tflite.py
 ```
 
 ## 推理流程
@@ -207,7 +211,3 @@ for image_path in image_paths:
 - [MobileNetV2: Inverted Residuals and Linear Bottlenecks](https://arxiv.org/abs/1801.04381)
 - [PyTorch官方文档](https://pytorch.org/docs/stable/index.html)
 - [TensorFlow Lite官方文档](https://www.tensorflow.org/lite)
-
-## 许可证
-
-本项目采用MIT许可证。
