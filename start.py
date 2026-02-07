@@ -47,14 +47,17 @@ def preprocess_image(image_path):
     return image
 
 
-def apply_color_adjustments(image_path, exposure, saturation):
+def apply_color_adjustments(image_path, exposure, contrast, saturation, highlight, shadow):
     """
     应用颜色调整到图像
     
     Args:
         image_path (str): 图像路径
         exposure (float): 曝光调整值
+        contrast (float): 对比度调整值
         saturation (float): 饱和度调整值
+        highlight (float): 高光调整值
+        shadow (float): 阴影调整值
     
     Returns:
         np.ndarray: 调整后的图像
@@ -62,8 +65,15 @@ def apply_color_adjustments(image_path, exposure, saturation):
     # 读取图像
     image = cv2.imread(image_path)
     
+    # 转换到浮点类型
+    image = image.astype(np.float32)
+    
+    # 应用对比度调整
+    mean = np.mean(image)
+    image = np.clip((image - mean) * contrast + mean, 0, 255)
+    
     # 转换到HSV颜色空间
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    hsv = cv2.cvtColor(image.astype(np.uint8), cv2.COLOR_BGR2HSV).astype(np.float32)
     
     # 调整曝光（通过调整V通道）
     hsv[:, :, 2] = np.clip(hsv[:, :, 2] * (1 + exposure), 0, 255)
@@ -72,7 +82,26 @@ def apply_color_adjustments(image_path, exposure, saturation):
     hsv[:, :, 1] = np.clip(hsv[:, :, 1] * saturation, 0, 255)
     
     # 转换回BGR颜色空间
-    adjusted_image = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+    adjusted_image = cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
+    
+    # 应用高光和阴影调整
+    # 创建亮度掩码
+    lab = cv2.cvtColor(adjusted_image, cv2.COLOR_BGR2LAB)
+    l_channel = lab[:, :, 0].astype(np.float32)
+    
+    # 应用高光调整（提高亮部）
+    highlight_mask = l_channel > 128
+    l_channel[highlight_mask] = np.clip(l_channel[highlight_mask] * (1 + highlight * 0.5), 0, 255)
+    
+    # 应用阴影调整（提高暗部）
+    shadow_mask = l_channel <= 128
+    l_channel[shadow_mask] = np.clip(l_channel[shadow_mask] * (1 + shadow * 0.5), 0, 255)
+    
+    # 更新LAB图像
+    lab[:, :, 0] = l_channel.astype(np.uint8)
+    
+    # 转换回BGR
+    adjusted_image = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
     
     return adjusted_image
 
@@ -133,14 +162,20 @@ def main():
             print(f"Error predicting parameters: {e}")
             continue
         
-        # 提取曝光和饱和度参数
+        # 提取曝光、对比度、饱和度、高光、阴影参数
         try:
             exposure = params[0][0][0]
-            saturation = params[0][0][1]
+            contrast = params[0][0][1]
+            saturation = params[0][0][2]
+            highlight = params[0][0][3]
+            shadow = params[0][0][4]
             
             print(f"  Predicted parameters:")
             print(f"    Exposure: {exposure:.4f}")
+            print(f"    Contrast: {contrast:.4f}")
             print(f"    Saturation: {saturation:.4f}")
+            print(f"    Highlight: {highlight:.4f}")
+            print(f"    Shadow: {shadow:.4f}")
         except Exception as e:
             print(f"Error extracting parameters: {e}")
             continue
@@ -148,7 +183,7 @@ def main():
         # 应用颜色调整
         print("  Applying color adjustments...")
         try:
-            adjusted_image = apply_color_adjustments(image_file, exposure, saturation)
+            adjusted_image = apply_color_adjustments(image_file, exposure, contrast, saturation, highlight, shadow)
             print(f"  Color adjustments applied successfully. Shape: {adjusted_image.shape}")
         except Exception as e:
             print(f"Error applying color adjustments: {e}")

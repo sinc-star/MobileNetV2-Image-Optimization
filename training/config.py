@@ -8,7 +8,7 @@ def get_config():
     return {
         # 模型配置
         'pretrained': True,
-        'output_dim': 2,  # 两参数版本：曝光和饱和度
+        'output_dim': 5,  # 五参数版本：曝光、对比度、饱和度、高光、阴影
         
         # 数据配置
         'db_path': 'data/unsplash/db/unsplash.db',  # 数据库路径
@@ -34,7 +34,7 @@ def get_eval_config():
     """
     return {
         # 模型配置
-        'output_dim': 2,
+        'output_dim': 5,  # 五参数版本：曝光、对比度、饱和度、高光、阴影
         
         # 数据配置
         'test_data_dir': 'data/test',
@@ -65,7 +65,10 @@ def get_inference_config():
         
         # 参数范围
         'param_ranges': {
-            'exposure': [-1.0, 1.0],
-            'saturation': [0.0, 2.0]
+            'exposure': [-1.0, 1.0],     # 曝光偏移范围
+            'contrast': [0.5, 2.0],       # 对比度系数范围
+            'saturation': [0.0, 2.0],     # 饱和度系数范围
+            'highlight': [0.0, 1.0],       # 高光调整范围
+            'shadow': [0.0, 1.0]          # 阴影调整范围
         }
     }
