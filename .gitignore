@@ -60,3 +60,7 @@ Thumbs.db
 # TensorFlow
 *.h5
 *.pb
+
+# Large dataset files
+data/upsplash/*.csv000
+data/unsplash/*.db
