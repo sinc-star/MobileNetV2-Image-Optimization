@@ -135,7 +135,7 @@ class UnsplashDynamicDataset(Dataset):
             print(f"Error downloading image: {e}")
         
         # 如果下载失败，返回随机图像
-        return np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8)
+        return np.ones((224, 224, 3), dtype=np.uint8) * 128  # 灰色图像 占位符
     
     def _preprocess_image(self, image):
         """
@@ -175,7 +175,7 @@ class UnsplashDynamicDataset(Dataset):
             image (torch.Tensor): 预处理后的图像
         
         Returns:
-            torch.Tensor: 调色参数 [exposure, saturation]
+            torch.Tensor: 调色参数 [exposure, contrast, saturation, highlight, shadow]
         """
         # 将张量转换为numpy数组
         img_np = image.permute(1, 2, 0).numpy()
@@ -187,36 +187,76 @@ class UnsplashDynamicDataset(Dataset):
         # 转换为HSV
         img_hsv = cv2.cvtColor((img_np * 255).astype(np.uint8), cv2.COLOR_RGB2HSV)
         
-        # 计算亮度和饱和度
+        # 计算图像统计特征
         brightness = np.mean(img_hsv[:, :, 2]) / 255.0
         saturation = np.mean(img_hsv[:, :, 1]) / 255.0
         
+        # 计算对比度（基于标准差）
+        img_lab = cv2.cvtColor((img_np * 255).astype(np.uint8), cv2.COLOR_RGB2LAB)
+        contrast = np.std(img_lab[:, :, 0]) / 255.0
+        
+        # 计算高光和阴影（基于亮度分布）
+        l_channel = img_lab[:, :, 0].astype(np.float32) / 255.0
+        highlight = np.mean(l_channel[l_channel > 0.6])  # 亮部平均值
+        shadow = 1.0 - np.mean(l_channel[l_channel < 0.4])  # 暗部平均值（反转）
+        
         # 生成参数
+        
         # 曝光调整：使亮度更加适中
         if brightness < 0.3:
-            exposure = 0.5  # 提亮
+            exposure = 0.6  # 大幅提亮
         elif brightness > 0.7:
-            exposure = -0.3  # 变暗
+            exposure = -0.4  # 大幅变暗
         else:
             exposure = 0.0  # 保持不变
         
+        # 对比度调整
+        if contrast < 0.15:
+            contrast_param = 1.8  # 增加对比度
+        elif contrast > 0.25:
+            contrast_param = 0.7  # 降低对比度
+        else:
+            contrast_param = 1.0  # 保持不变
+        
         # 饱和度调整：使色彩更加自然
         if saturation < 0.3:
-            saturation_param = 1.5  # 增加饱和度
+            saturation_param = 1.6  # 增加饱和度
         elif saturation > 0.7:
-            saturation_param = 0.8  # 降低饱和度
+            saturation_param = 0.9  # 降低饱和度
         else:
             saturation_param = 1.0  # 保持不变
         
+        # 高光调整
+        if highlight < 0.7:
+            highlight_param = 0.8  # 增强高光
+        elif highlight > 0.85:
+            highlight_param = 0.3  # 降低高光
+        else:
+            highlight_param = 0.5  # 保持不变
+        
+        # 阴影调整
+        if shadow < 0.3:
+            shadow_param = 0.8  # 增强阴影
+        elif shadow > 0.5:
+            shadow_param = 0.4  # 降低阴影
+        else:
+            shadow_param = 0.5  # 保持不变
+        
         # 添加一些随机性
-        exposure += np.random.normal(0, 0.1)
-        saturation_param += np.random.normal(0, 0.1)
+        exposure += np.random.normal(0, 0.08)
+        contrast_param += np.random.normal(0, 0.08)
+        saturation_param += np.random.normal(0, 0.08)
+        highlight_param += np.random.normal(0, 0.08)
+        shadow_param += np.random.normal(0, 0.08)
         
         # 限制范围
         exposure = np.clip(exposure, -1.0, 1.0)
+        contrast_param = np.clip(contrast_param, 0.5, 2.0)
         saturation_param = np.clip(saturation_param, 0.0, 2.0)
+        highlight_param = np.clip(highlight_param, 0.0, 1.0)
+        shadow_param = np.clip(shadow_param, 0.0, 1.0)
         
-        return torch.tensor([exposure, saturation_param], dtype=torch.float32)
+        return torch.tensor([exposure, contrast_param, saturation_param, highlight_param, shadow_param], dtype=torch.float32)
 
 if __name__ == '__main__':
     # 测试数据集

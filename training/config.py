@@ -54,7 +54,7 @@ def get_inference_config():
     """
     return {
         # 模型配置
-        'output_dim': 2,
+        'output_dim': 5,
         
         # 图像配置
         'image_size': (224, 224),
