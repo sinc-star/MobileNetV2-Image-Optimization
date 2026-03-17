@@ -17,22 +17,24 @@ def export_onnx(model_path, output_path, input_shape=(1, 3, 224, 224)):
         output_path (str): ONNX模型输出路径
         input_shape (tuple): 输入形状
     """
-    # 获取配置
-    config = get_config()
+    # 加载模型权重
+    if not os.path.exists(model_path):
+        raise ValueError(f'Model path not found: {model_path}')
+    
+    checkpoint = torch.load(model_path, map_location='cpu', weights_only=False)
+    
+    # 自动检测输出维度
+    output_dim = checkpoint['model_state_dict']['regression_head.fc3.weight'].shape[0]
+    print(f'Detected output dimension: {output_dim}')
     
     # 创建模型
     model = AestheticRegressionModel(
         pretrained=False,
-        output_dim=config['output_dim']
+        output_dim=output_dim
     )
     
-    # 加载模型权重
-    if os.path.exists(model_path):
-        checkpoint = torch.load(model_path, map_location='cpu', weights_only=False)
-        model.load_state_dict(checkpoint['model_state_dict'])
-        print(f'Loaded model from {model_path}')
-    else:
-        raise ValueError(f'Model path not found: {model_path}')
+    model.load_state_dict(checkpoint['model_state_dict'])
+    print(f'Loaded model from {model_path}')
     
     # 设置模型为评估模式
     model.eval()
@@ -58,18 +60,15 @@ def export_onnx(model_path, output_path, input_shape=(1, 3, 224, 224)):
 
 def main():
     """
-    主函数
+    主函数 -
     """
-    # 获取配置
-    config = get_config()
-    
     # 创建保存目录
     onnx_save_dir = 'models/onnx'
     os.makedirs(onnx_save_dir, exist_ok=True)
     
-    # 导出ONNX模型
-    model_path = os.path.join(config['save_dir'], 'best_model_epoch_1.pth')
-    output_path = os.path.join(onnx_save_dir, 'model.onnx')
+    # 导出第19轮模型
+    model_path = r'E:\ai\MobileNetV2\models\checkpoints\best_model_5params_epoch_19.pth'
+    output_path = os.path.join(onnx_save_dir, 'model_5param_epoch_19.onnx')
     
     # 检查模型文件是否存在
     if not os.path.exists(model_path):

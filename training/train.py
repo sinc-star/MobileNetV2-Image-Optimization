@@ -14,7 +14,7 @@ from data.dynamic_dataset import UnsplashDynamicDataset
 from data.augmentations import get_default_augmentations
 from utils.metrics import calculate_metrics
 
-def create_dynamic_data_loader(db_path, batch_size=32, shuffle=True, split='train'):
+def create_dynamic_data_loader(db_path, batch_size=32, shuffle=True, split='train', local_images_dir=None):
     """
     创建动态数据加载器
     
@@ -23,17 +23,18 @@ def create_dynamic_data_loader(db_path, batch_size=32, shuffle=True, split='trai
         batch_size (int): 批量大小
         shuffle (bool): 是否打乱
         split (str): 数据集划分，可选值: 'train', 'val', 'test'
+        local_images_dir (str): 本地图片目录，如果提供则优先从本地加载
     
     Returns:
         DataLoader: 数据加载器
     """
-    dataset = UnsplashDynamicDataset(db_path, split=split)
+    dataset = UnsplashDynamicDataset(db_path, split=split, local_images_dir=local_images_dir)
     data_loader = DataLoader(
         dataset,
         batch_size=batch_size,
         shuffle=shuffle,
-        num_workers=0,  # 在Windows上设置为0以避免多线程问题
-        pin_memory=False  # 当num_workers=0时，pin_memory设置为False
+        num_workers=4,  # 在Windows上设置为0以避免多线程问题
+        pin_memory=True  # 当num_workers=0时，pin_memory设置为False
     )
     return data_loader
 
@@ -73,11 +74,13 @@ class Trainer:
         
         # 创建数据加载器
         db_path = config['db_path']
+        local_images_dir = config.get('local_images_dir', None)
         self.train_loader = create_dynamic_data_loader(
             db_path=db_path,
             batch_size=config['batch_size'],
             shuffle=True,
-            split='train'
+            split='train',
+            local_images_dir=local_images_dir
         )
         
         # 对于验证集，使用划分好的验证集
@@ -85,7 +88,8 @@ class Trainer:
             db_path=db_path,
             batch_size=config['batch_size'],
             shuffle=False,
-            split='val'
+            split='val',
+            local_images_dir=local_images_dir
         )
         
         # 创建数据增强
@@ -202,7 +206,7 @@ class Trainer:
         if avg_loss < self.best_val_loss:
             self.best_val_loss = avg_loss
             self.early_stop_counter = 0
-            model_path = os.path.join(self.save_dir, f'best_model_epoch_{epoch+1}.pth')
+            model_path = os.path.join(self.save_dir, f'best_model_5params_epoch_{epoch+1}.pth')
             torch.save({
                 'epoch': epoch+1,
                 'model_state_dict': self.model.state_dict(),

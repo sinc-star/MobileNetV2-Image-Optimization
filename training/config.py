@@ -12,6 +12,7 @@ def get_config():
         
         # 数据配置
         'db_path': 'data/unsplash/db/unsplash.db',  # 数据库路径
+        'local_images_dir': 'data/unsplash/images',  # 本地图片目录，如果存在则优先从本地加载
         'batch_size': 32,
         
         # 训练配置

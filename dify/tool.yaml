@@ -1,0 +1,103 @@
+identity:
+  name: image_aesthetic_enhancement
+  author: MobileNetV2
+  label:
+    en_US: Image Aesthetic Enhancement
+    zh_Hans: 图像美学增强
+  description:
+    en_US: Use MobileNetV2 ONNX model to predict and apply aesthetic color adjustments (exposure and saturation) to images
+    zh_Hans: 使用 MobileNetV2 ONNX 模型预测并应用美学色彩调整（曝光和饱和度）到图像
+  icon: icon.svg
+
+api:
+  type: openapi
+  openapi:
+    openapi: 3.0.0
+    info:
+      title: Image Aesthetic Enhancement API
+      version: 1.0.0
+    servers:
+      - url: http://localhost:5000
+    paths:
+      /predict:
+        post:
+          operationId: predict_aesthetic_params
+          summary: Predict aesthetic parameters for an image
+          description: Predict exposure and saturation adjustments for an image using the MobileNetV2 ONNX model
+          requestBody:
+            required: true
+            content:
+              application/json:
+                schema:
+                  type: object
+                  required:
+                    - image
+                  properties:
+                    image:
+                      type: string
+                      description: Base64 encoded image or image URL
+                      example: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+                    return_base64:
+                      type: boolean
+                      default: false
+                      description: Whether to return the adjusted image as base64
+          responses:
+            '200':
+              description: Successful prediction
+              content:
+                application/json:
+                  schema:
+                    type: object
+                    properties:
+                      success:
+                        type: boolean
+                      params:
+                        type: object
+                        properties:
+                          exposure:
+                            type: number
+                            description: Exposure adjustment value (-1.0 to 1.0)
+                          saturation:
+                            type: number
+                            description: Saturation adjustment value (0.0 to 2.0)
+                      adjusted_image:
+                        type: string
+                        description: Base64 encoded adjusted image (if return_base64 is true)
+                      message:
+                        type: string
+            '400':
+              description: Bad request
+              content:
+                application/json:
+                  schema:
+                    type: object
+                    properties:
+                      success:
+                        type: boolean
+                      error:
+                        type: string
+            '500':
+              description: Internal server error
+              content:
+                application/json:
+                  schema:
+                    type: object
+                    properties:
+                      success:
+                        type: boolean
+                      error:
+                        type: string
+
+parameters:
+  - name: model_path
+    type: secret
+    required: false
+    default: models/onnx/model.onnx
+    label:
+      en_US: Model Path
+      zh_Hans: 模型路径
+    human_description:
+      en_US: Path to the ONNX model file
+      zh_Hans: ONNX 模型文件路径
+    llm_description: Path to the ONNX model file for image aesthetic enhancement
+    form: llm

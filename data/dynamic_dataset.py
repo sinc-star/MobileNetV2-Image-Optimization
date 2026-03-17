@@ -4,10 +4,11 @@ import sqlite3
 import requests
 import cv2
 import numpy as np
+import os
 from collections import OrderedDict
 
 class UnsplashDynamicDataset(Dataset):
-    def __init__(self, db_path, transform=None, cache_size=100, split='train'):
+    def __init__(self, db_path, transform=None, cache_size=100, split='train', local_images_dir=None):
         """
         动态加载Unsplash数据集
         
@@ -16,11 +17,13 @@ class UnsplashDynamicDataset(Dataset):
             transform (callable): 数据变换
             cache_size (int): 缓存大小
             split (str): 数据集划分，可选值: 'train', 'val', 'test'
+            local_images_dir (str): 本地图片目录，如果提供则优先从本地加载
         """
         self.db_path = db_path
         self.transform = transform
         self.cache_size = cache_size
         self.split = split
+        self.local_images_dir = local_images_dir
         self.image_urls = self._load_image_urls()
         self.cache = OrderedDict()  # LRU缓存
     
@@ -101,7 +104,7 @@ class UnsplashDynamicDataset(Dataset):
     
     def _download_image(self, image_url):
         """
-        下载图像
+        下载或加载图像
         
         Args:
             image_url (str): 图像URL
@@ -109,6 +112,17 @@ class UnsplashDynamicDataset(Dataset):
         Returns:
             np.ndarray: 图像数组
         """
+        # 尝试从本地加载
+        if self.local_images_dir:
+            photo_id = image_url.split('/')[-1].split('?')[0]
+            local_path = os.path.join(self.local_images_dir, f"{photo_id}.jpg")
+            
+            if os.path.exists(local_path):
+                image = cv2.imread(local_path)
+                if image is not None:
+                    return image
+        
+        # 本地不存在，从网络下载
         try:
             # 确保URL格式正确
             if not image_url.startswith(('http://', 'https://')):
